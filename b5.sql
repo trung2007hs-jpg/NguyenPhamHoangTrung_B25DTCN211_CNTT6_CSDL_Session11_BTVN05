@@ -26,11 +26,11 @@ BEGIN
     DECLARE v_old_bed_id INT;
     DECLARE v_dept_name VARCHAR(100);
     DECLARE v_found_bed_id INT;
-    -- Bước 1: Lấy thông tin hiện tại của bệnh nhân
+    -- B1: Lấy thông tin hiện tại của bệnh nhân
     SELECT status, current_bed_id INTO v_current_status, v_old_bed_id
     FROM patients 
     WHERE patient_id = p_patient_id;
-    -- Bước 2: Kiểm tra các "Bẫy" logic bằng IF...ELSE
+    -- B2: Kiểm tra các "Bẫy" logic bằng IF...ELSE
     -- Kiểm tra trạng thái bệnh nhân
     IF v_current_status = 'Completed' THEN
         SET p_message = 'Lỗi: Bệnh nhân đã xuất viện, không thể chuyển khoa.';
@@ -40,7 +40,7 @@ BEGIN
         SET p_message = 'Mã khoa đích không tồn tại trên hệ thống.';
         SET p_new_bed_id = NULL;
     ELSE
-        -- Bước 3: Tìm giường tại khoa mới
+        -- B3: Tìm giường tại khoa mới
         CALL find_available_bed(p_target_dept_id, v_found_bed_id);
         -- Kiểm tra nếu hết giường
         IF v_found_bed_id IS NULL THEN
@@ -48,7 +48,7 @@ BEGIN
             SET p_message = CONCAT('Từ chối: Khoa ', v_dept_name, ' hiện đã hết giường trống.');
             SET p_new_bed_id = NULL;
         ELSE
-            -- Bước 4: Thực hiện chuyển giường (Dữ liệu bắt đầu thay đổi từ đây)
+            -- B4: Thực hiện chuyển giường (Dữ liệu bắt đầu thay đổi từ đây)
             -- A. Giải phóng giường cũ (Nếu có)
             IF v_old_bed_id IS NOT NULL THEN
                 UPDATE beds SET status = 'Available' WHERE bed_id = v_old_bed_id;
