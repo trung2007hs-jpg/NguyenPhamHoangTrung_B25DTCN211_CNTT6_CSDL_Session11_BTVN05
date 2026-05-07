@@ -37,7 +37,7 @@ BEGIN
         SET p_new_bed_id = NULL;
     -- Kiểm tra xem khoa đích có tồn tại không
     ELSEIF NOT EXISTS (SELECT 1 FROM departments WHERE dept_id = p_target_dept_id) THEN
-        SET p_message = 'Lỗi: Mã khoa đích không tồn tại trên hệ thống.';
+        SET p_message = 'Mã khoa đích không tồn tại trên hệ thống.';
         SET p_new_bed_id = NULL;
     ELSE
         -- Bước 3: Tìm giường tại khoa mới
@@ -59,7 +59,7 @@ BEGIN
             UPDATE patients SET current_bed_id = v_found_bed_id WHERE patient_id = p_patient_id;
             -- Trả về kết quả thành công
             SET p_new_bed_id = v_found_bed_id;
-            SET p_message = CONCAT('Thành công: Đã chuyển bệnh nhân đến giường ', v_found_bed_id);
+            SET p_message = CONCAT('Đã chuyển bệnh nhân đến giường ', v_found_bed_id);
         END IF;
     END IF;
 END //
