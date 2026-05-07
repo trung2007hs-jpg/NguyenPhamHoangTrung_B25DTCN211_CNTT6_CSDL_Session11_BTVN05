@@ -5,13 +5,12 @@ CREATE PROCEDURE find_available_bed(
     OUT p_bed_id INT
 )
 BEGIN
-    -- Tìm giường đầu tiên có trạng thái 'Available' tại khoa chỉ định
-    -- Sử dụng FOR UPDATE để khóa hàng, tránh y tá khác chiếm mất trong cùng 1 giây
+    -- Tìm giường đầu tiên có trạng thái trống tại khoa chỉ định
+    SET p_bed_id = NULL; -- Mặc định là không tìm thấy
     SELECT bed_id INTO p_bed_id
     FROM beds
     WHERE dept_id = p_dept_id AND status = 'Available'
-    LIMIT 1
-    FOR UPDATE;
+    LIMIT 1;
 END //
 
 -- 2. Procedure Master: Điều phối chính
@@ -21,48 +20,46 @@ CREATE PROCEDURE transfer_patient_one_touch(
     OUT p_new_bed_id INT,
     OUT p_message VARCHAR(255)
 )
-/* - START TRANSACTION: Mở một "bản nháp" an toàn. Dữ liệu chưa thay đổi thật.
-   - ROLLBACK: Lệnh "Hoàn tác". Nếu gặp lỗi (hết giường, sai mã), 
-               hệ thống xóa nháp, trả dữ liệu về y như cũ.
-   - COMMIT: Lệnh "Chốt đơn". Khi mọi bước đều OK, dữ liệu mới được lưu thật.
-*/
 BEGIN
+    -- Khai báo biến cục bộ
     DECLARE v_current_status VARCHAR(20);
     DECLARE v_old_bed_id INT;
     DECLARE v_dept_name VARCHAR(100);
     DECLARE v_found_bed_id INT;
-    -- Bắt đầu giao dịch để đảm bảo an toàn dữ liệu
-    START TRANSACTION;
-    -- Bẫy dữ liệu 1: Kiểm tra bệnh nhân và trạng thái hồ sơ
+    -- Bước 1: Lấy thông tin hiện tại của bệnh nhân
     SELECT status, current_bed_id INTO v_current_status, v_old_bed_id
-    FROM patients WHERE patient_id = p_patient_id;
+    FROM patients 
+    WHERE patient_id = p_patient_id;
+    -- Bước 2: Kiểm tra các "Bẫy" logic bằng IF...ELSE
+    -- Kiểm tra trạng thái bệnh nhân
     IF v_current_status = 'Completed' THEN
-        SET p_message = 'Error: Patient already discharged.';
-        ROLLBACK;
-    -- Bẫy dữ liệu 2: Kiểm tra khoa đích tồn tại
+        SET p_message = 'Lỗi: Bệnh nhân đã xuất viện, không thể chuyển khoa.';
+        SET p_new_bed_id = NULL;
+    -- Kiểm tra xem khoa đích có tồn tại không
     ELSEIF NOT EXISTS (SELECT 1 FROM departments WHERE dept_id = p_target_dept_id) THEN
-        SET p_message = 'Error: Department ID does not exist.';
-        ROLLBACK;
+        SET p_message = 'Lỗi: Mã khoa đích không tồn tại trên hệ thống.';
+        SET p_new_bed_id = NULL;
     ELSE
-        -- Gọi Procedure phụ để dò giường
+        -- Bước 3: Tìm giường tại khoa mới
         CALL find_available_bed(p_target_dept_id, v_found_bed_id);
-
-        -- Bẫy Overbooking: Hết giường
+        -- Kiểm tra nếu hết giường
         IF v_found_bed_id IS NULL THEN
             SELECT dept_name INTO v_dept_name FROM departments WHERE dept_id = p_target_dept_id;
-            SET p_message = CONCAT('Rejected: Department ', v_dept_name, ' is full.');
-            ROLLBACK;
+            SET p_message = CONCAT('Từ chối: Khoa ', v_dept_name, ' hiện đã hết giường trống.');
+            SET p_new_bed_id = NULL;
         ELSE
-            -- Thực thi chuyển giường "1 chạm"
-            -- Bước A: Giải phóng giường cũ
-            UPDATE beds SET status = 'Available' WHERE bed_id = v_old_bed_id;
-            -- Bước B: Gán và Khóa giường mới
+            -- Bước 4: Thực hiện chuyển giường (Dữ liệu bắt đầu thay đổi từ đây)
+            -- A. Giải phóng giường cũ (Nếu có)
+            IF v_old_bed_id IS NOT NULL THEN
+                UPDATE beds SET status = 'Available' WHERE bed_id = v_old_bed_id;
+            END IF;
+            -- B. Đánh dấu giường mới là đã có người (Occupied)
             UPDATE beds SET status = 'Occupied' WHERE bed_id = v_found_bed_id;
-            -- Bước C: Cập nhật hồ sơ bệnh nhân
+            -- C. Cập nhật ID giường mới vào hồ sơ bệnh nhân
             UPDATE patients SET current_bed_id = v_found_bed_id WHERE patient_id = p_patient_id;
+            -- Trả về kết quả thành công
             SET p_new_bed_id = v_found_bed_id;
-            SET p_message = 'Success: Patient transferred successfully.';
-            COMMIT;
+            SET p_message = CONCAT('Thành công: Đã chuyển bệnh nhân đến giường ', v_found_bed_id);
         END IF;
     END IF;
 END //
