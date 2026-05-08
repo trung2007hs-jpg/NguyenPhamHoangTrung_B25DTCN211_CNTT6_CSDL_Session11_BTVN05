@@ -1,5 +1,5 @@
 -- 1. Procedure phụ: Tìm giường trống
-DELIMITER //
+DELIMITER $$
 CREATE PROCEDURE find_available_bed(
     IN p_dept_id INT,
     OUT p_bed_id INT
@@ -62,8 +62,7 @@ BEGIN
             SET p_message = CONCAT('Đã chuyển bệnh nhân đến giường ', v_found_bed_id);
         END IF;
     END IF;
-END //
-DELIMITER ;
+END $$;
 
 -- Kịch bản kiểm thử (Test Cases)
 
